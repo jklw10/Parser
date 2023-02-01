@@ -1,0 +1,12 @@
+C:\Users\Käyttäjä\source\repos\Parser\obj\Debug\net7.0\Parser.csproj.AssemblyReference.cache
+C:\Users\Käyttäjä\source\repos\Parser\obj\Debug\net7.0\Parser.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\Käyttäjä\source\repos\Parser\obj\Debug\net7.0\Parser.AssemblyInfoInputs.cache
+C:\Users\Käyttäjä\source\repos\Parser\obj\Debug\net7.0\Parser.AssemblyInfo.cs
+C:\Users\Käyttäjä\source\repos\Parser\obj\Debug\net7.0\Parser.csproj.CoreCompileInputs.cache
+C:\Users\Käyttäjä\source\repos\Parser\bin\Debug\net7.0\Parser.deps.json
+C:\Users\Käyttäjä\source\repos\Parser\bin\Debug\net7.0\Parser.dll
+C:\Users\Käyttäjä\source\repos\Parser\bin\Debug\net7.0\Parser.pdb
+C:\Users\Käyttäjä\source\repos\Parser\obj\Debug\net7.0\Parser.dll
+C:\Users\Käyttäjä\source\repos\Parser\obj\Debug\net7.0\refint\Parser.dll
+C:\Users\Käyttäjä\source\repos\Parser\obj\Debug\net7.0\Parser.pdb
+C:\Users\Käyttäjä\source\repos\Parser\obj\Debug\net7.0\ref\Parser.dll
