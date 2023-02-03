@@ -1,4 +1,5 @@
 ﻿
+using System.Collections.Generic;
 using System.Drawing;
 using System.Numerics;
 using System.Text.RegularExpressions;
@@ -24,9 +25,9 @@ public struct Token
     public string TokenString;
     public Operator Op;
     public double DValue; //todo change?
-    public int IValue;
+    public long IValue;
 
-    public Token(TokenType type, int weight, string tokenString, Operator op = default, double dValue = default, int iValue = default)
+    public Token(TokenType type, int weight, string tokenString, Operator op = default, double dValue = default, long iValue = default)
     {
         Type = type;
         Weight = weight;
@@ -50,19 +51,19 @@ public struct Token
             };
             this = new(t, OperatorGetter.GetWeight(op), token, op);
         }
+        else if (long.TryParse(token, out long iNum))
+        {
+            this = new(TokenType.IValue, 0, token, iValue: iNum);
+        }
         else if (double.TryParse(token, out double dNum))
         {
             this = new(TokenType.DValue, 0, token, dValue: dNum);
-        }
-        else if (int.TryParse(token, out int iNum))
-        {
-            this = new(TokenType.IValue, 0, token, iValue: iNum);
         }
         else if (MathParser.CurrentParser.DVC.TryGetValueRefrence(token, out ValueReference<double> dvalue))
         {
             this = new(TokenType.ValueReference | TokenType.DValue, 0, token, dValue: dvalue.value);
         }
-        else if (MathParser.CurrentParser.IVC.TryGetValueRefrence(token, out ValueReference<int> ivalue))
+        else if (MathParser.CurrentParser.IVC.TryGetValueRefrence(token, out ValueReference<long> ivalue))
         {
             this = new(TokenType.ValueReference | TokenType.IValue, 0, token, iValue: ivalue.value);
         }
@@ -71,7 +72,7 @@ public struct Token
             this = new(TokenType.Invalid, 0, token);
         }
     }
-    public (bool i,bool d) GetValueReference(out ValueReference<int> ivalue, out ValueReference<double> dvalue)
+    public (bool i,bool d) GetValueReference(out ValueReference<long> ivalue, out ValueReference<double> dvalue)
     {
         if (MathParser.CurrentParser is null || !Type.IsSet(TokenType.ValueReference))
             throw new Exception("Value cannot be refrenced");
@@ -81,82 +82,76 @@ public struct Token
     }
     public void AssignToRefrence(Operator contextOperator, Token value)
     {
-        var vr = GetValueReference(out ValueReference<int> i, out ValueReference<double> d);
+        var vr = GetValueReference(out ValueReference<long> i, out ValueReference<double> d);
 
         if (vr.d)
             d.value = value.Type.IsSet(TokenType.DValue) ? value.DValue : value.IValue;
         else
-            i.value = value.Type.IsSet(TokenType.IValue) ? value.IValue : (int)contextOperator.ApplyFunction(value.DValue);
+            i.value = value.Type.IsSet(TokenType.IValue) ? value.IValue : contextOperator.ApplyFunctionLong(value.DValue);
     }
-    public Token ApplyOperator(Operator op, Token b)
+    public Token ApplyFunction(Operator op)
     {
+        if (op == Operator.NoOp) return this;
+        if (Type.IsSet(TokenType.DValue))
+            DValue = op.ApplyFunction(DValue);
+        else
+            IValue = op.ApplyFunctionLong(IValue);
+        return this;
+    }
+    public Token ApplyOperator(Operator op, Token value, Operator contextOperator)
+    {
+        if (op == Operator.Equals) return SetValue(contextOperator, value);
+        TokenString = TokenString + op + value.TokenString;
+        if (Type.IsSet(TokenType.DValue))
+            DValue = Operate(IValue, value.Type.IsSet(TokenType.DValue) ? value.DValue : value.IValue,op);
+        else
+            IValue = Operate(IValue, value.Type.IsSet(TokenType.IValue) ? value.IValue : (long)(contextOperator.ApplyFunction(value.DValue)),op);
+        return this;
+    }
+    public static long Operate(long v1, long v2, Operator op)
+    {
+        return op switch
+        {
+            Operator.Add => v1 + v2,
+            Operator.Subtract => v1 - v2,
+            Operator.Multiply => v1 * v2,
+            Operator.Divide => v1 / v2,
+            Operator.Raise => (long)Math.Pow(v1, v2),
+            Operator.Smaller => v1 < v2 ? 1 : 0,
+            Operator.SmallerOrEqual => v1 <= v2 ? 1 : 0,
+            Operator.Larger => v1 > v2 ? 1 : 0,
+            Operator.LargerOrEqual => v1 >= v2 ? 1 : 0,
+            Operator.Not => v1 != v2 ? 1 : 0,
+            Operator.Or => v1 | v2,
+            Operator.And => v1 & v2,
+            _ => throw new("invalid operator type:" + op + " between " + v1 + " and " + v2)
+        };
+    }
+    public static double Operate(double v1, double v2, Operator op)
+    {
+        return op switch
+        {
+            Operator.Add => v1 + v2,
+            Operator.Subtract => v1 - v2,
+            Operator.Multiply => v1 * v2,
+            Operator.Divide => v1 / v2,
+            Operator.Raise => Math.Pow(v1, v2),
+            Operator.Smaller => v1 < v2 ? 1 : 0,
+            Operator.SmallerOrEqual => v1 <= v2 ? 1 : 0,
+            Operator.Larger => v1 > v2 ? 1 : 0,
+            Operator.LargerOrEqual => v1 >= v2 ? 1 : 0,
+            _ => throw new("invalid operator type:" + op + " between " + v1 + " and " + v2)
+        };
+    }
+    public Token SetValue(Operator contextOp, Token value)
+    {
+        if (!Type.IsSet(TokenType.ValueReference))
+            throw new("can't set a non refrence value.");
 
-        if (Type.IsSet(TokenType.IValue) && b.Type.IsSet(TokenType.IValue))
-        {
-            return new(TokenType.IValue, 0, TokenString + op + b.TokenString, iValue: op switch
-            {
-                Operator.Add => IValue + b.IValue,
-                Operator.Subtract => IValue - b.IValue,
-                Operator.Multiply => IValue * b.IValue,
-                Operator.Divide => IValue / b.IValue,
-                Operator.Raise => (int)Math.Pow(IValue, b.IValue),
-                Operator.Equals => SetValue( b.IValue),
-                Operator.Smaller => IValue < b.IValue ? 1 : 0,
-                Operator.SmallerOrEqual => IValue <= b.IValue ? 1 : 0,
-                Operator.Larger => IValue > b.IValue ? 1 : 0,
-                Operator.LargerOrEqual => IValue >= b.IValue ? 1 : 0,
-                Operator.Not => IValue != b.IValue ? 1 : 0,
-                Operator.Or => IValue | b.IValue,
-                Operator.And => IValue & b.IValue,
-                _ => throw new("invalid operator type:" + op + " between " + TokenString + " and " + b.TokenString)
-            });
-        }
-        if (b.Type.IsSet(TokenType.IValue))
-            b.DValue = b.IValue;
-        if (Type.IsSet(TokenType.IValue))
-            DValue = IValue;
-        return new(TokenType.DValue, 0, TokenString + op + b.TokenString, dValue: op switch
-        {
-            Operator.Add => DValue + b.DValue,
-            Operator.Subtract => DValue - b.DValue,
-            Operator.Multiply => DValue * b.DValue,
-            Operator.Divide => DValue / b.DValue,
-            Operator.Raise => Math.Pow(DValue, b.DValue),
-            Operator.Equals => SetValue(b.DValue),
-            Operator.Smaller => DValue < b.DValue ? 1 : 0,
-            Operator.SmallerOrEqual => DValue <= b.DValue ? 1 : 0,
-            Operator.Larger => DValue > b.DValue ? 1 : 0,
-            Operator.LargerOrEqual => DValue >= b.DValue ? 1 : 0,
-            _ => throw new("invalid operator type:" + op + " between " + TokenString + " and " + b.TokenString)
-        });
-        
-        
+        AssignToRefrence(contextOp, value);
+        return this;
     }
-    public double SetValue(double value)
-    {
-        if (Type.IsSet(TokenType.ValueReference))
-        {
-            if (Type.IsSet(TokenType.DValue))
-            {
-                AssignToRefrence(Operator.NoOp, new(TokenType.DValue,0,"",dValue: value));
-                return value;
-            }
-            throw new("Cannot set int to a double");
-        }
-        throw new("can't set a non refrence value.");
-
-    }
-    public int SetValue(int value)
-    {
-        DValue = value;
-        IValue = value;
-        if (Type.IsSet(TokenType.ValueReference))
-        {
-            AssignToRefrence(Operator.NoOp, new(TokenType.IValue, 0, "", iValue: value));
-            return value;
-        }
-        throw new("can't set a non refrence value.");
-    }
+    
 }
 public interface IValueContainer<T> where T : INumber<T>
 {
@@ -241,11 +236,28 @@ public static partial class OperatorGetter
             Operator.Round => Math.Round(value),
             Operator.Ceil => Math.Ceiling(value),
             Operator.Floor => Math.Floor(value),
+            Operator.NoOp => value,
             _ => throw new(op + "is not a context operator"),
+        };
+    }
+    public static long ApplyFunctionLong(this Operator op, double value) 
+    {
+        return op switch
+        {
+            Operator.Truncate => (long)value,
+            Operator.SquareRoot => (long)Math.Sqrt(value),
+            Operator.Round => (long)Math.Round(value),
+            Operator.Ceil => (long)Math.Ceiling(value),
+            Operator.Floor => (long)Math.Floor(value),
+            _ => throw new(op + "can't assign double trying to assign a double to long"),
         };
     }
     public static bool IsSet(this TokenType self, TokenType flag)
     {
+        if(flag == TokenType.Invalid)
+        {
+            return self == TokenType.Invalid;
+        }
         return (self & flag) == flag;
     }
 }

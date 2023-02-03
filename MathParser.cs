@@ -5,27 +5,26 @@ public class MathParser
 {
     public static MathParser? CurrentParser { get; private set; }
     public IValueContainer<double> DVC;
-    public IValueContainer<int> IVC;
-    public MathContext MathContext;
-    public MathParser(IValueContainer<double> dvc, IValueContainer<int> ivc, string text)
+    public IValueContainer<long> IVC;
+    public MathParser(IValueContainer<double> dvc, IValueContainer<long> ivc)
     {
         DVC = dvc;
         IVC = ivc;
         CurrentParser = this;
-        MathContext = Parse(text);
     }
     public MathContext Parse(string text)
     {
+        CurrentParser = this;
         string[] tokens = OperatorGetter.SplitOperators().Split(text);
+        tokens = tokens.Where(s => !string.IsNullOrWhiteSpace(s)).ToArray();
         return WeighTokens(Tokenize(tokens));
-        
     }
-    private MathContext WeighTokens(List<Token> tokens)
+    private static MathContext WeighTokens(List<Token> tokens)
     {
         int ContextID = 0;
         //todo default operator
-        MathContext floor = new() { contextOperator = Operator.Round };
-        Operator nextConOp = Operator.Round;
+        MathContext floor = new() { contextOperator = Operator.NoOp };
+        Operator nextConOp = Operator.NoOp;
         for (int i = 0; i < tokens.Count; i++)
         {
             var t = tokens[i];
@@ -60,17 +59,33 @@ public class MathParser
     private static List<Token> Tokenize(Span<string> tokenSpan)
     {
         List<Token> tokens = new();
-        foreach (var token in tokenSpan)
+        for (int i = 0; i < tokenSpan.Length; i++)
         {
-            if(string.IsNullOrWhiteSpace(token)) continue;
-            Token t = new(token);
+            Token t = new(tokenSpan[i]);
             if(tokens.Count != 0 && tokens.Last().Type != TokenType.Operator && t.Type.HasFlag(TokenType.Operator | TokenType.ContextOpen | TokenType.ContextClose | TokenType.ContextOperator))
             {
                 tokens.Add(new("*"));
             }
+            if (t.Type.IsSet(TokenType.Operator) && t.Op == Operator.Dot) {
+                tokens.RemoveAt(tokens.Count - 1);
+                i += TryConjoinToken(tokenSpan[i-1], tokenSpan[i..^0], out t)-1;
+            }
             tokens.Add(t);
         }
         return tokens;
+    }
+    private static int TryConjoinToken(string toJoin, Span<string> tokenSpan, out Token t)
+    {
+        Exception invalidToken = new(toJoin + " is an invalid token.");
+        if (tokenSpan.Length<=2) throw invalidToken;
+        if (!(OperatorGetter.GetOperator(tokenSpan[0], out Operator op) && op == Operator.Dot)) throw invalidToken;
+        t = new(toJoin+tokenSpan[0] + tokenSpan[1]);
+        if (t.Type.IsSet(TokenType.Invalid))
+        {
+            if(tokenSpan.Length <= 3) throw invalidToken;
+            return TryConjoinToken(toJoin + tokenSpan[0] + tokenSpan[1], tokenSpan[2..^0], out t) +2;
+        }
+        return 2;
     }
 }
 internal struct MathPiece
@@ -136,7 +151,7 @@ public class MathContext
         Calculate(tokens.ToArray(), out value);
     private bool Calculate(Span<MathPiece> tokenSpan, out Token result)
     {
-        result = new(TokenType.Invalid, 0, "");
+        result = Token.INVALID;
         if(tokenSpan.Length == 0) return false;
 
         Token first = GetToken(tokenSpan[0]);
@@ -150,24 +165,17 @@ public class MathContext
                     Calculate(tokenSpan[2..^0], out third);
             }
 
-            result = first.ApplyOperator(second.Op, third);
+            result = first.ApplyOperator(second.Op, third, contextOperator);
             return second.Op == Operator.Equals;
         }
-        result = new(TokenType.DValue, 0, "", dValue: contextOperator.ApplyFunction(first.Type.IsSet(TokenType.DValue)? first.DValue:first.IValue));
+
+        result = first.ApplyFunction(contextOperator);
         return false;
     }
     static Token GetToken(MathPiece mp)
     {
-        if (mp.MathContext is not null)
-        {
-            mp.MathContext.Calculate(out Token cthird);
-            return mp.Token ?? cthird;
-        }
-        return mp.Token ?? Token.INVALID;
+        Token TokenOut = mp.Token ?? Token.INVALID;
+        mp.MathContext?.Calculate(out TokenOut);
+        return TokenOut;
     }
-
-
-    
-
-    
 }
